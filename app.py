@@ -21,12 +21,23 @@ database.init_db()
 if "training" not in st.session_state: st.session_state.training = None
 if "source_df" not in st.session_state: st.session_state.source_df = None
 
-st.sidebar.title("🌱 CropWise Ultimate")
-page = st.sidebar.radio("Navigate", ["Dashboard", "Recommend Crop", "Field Insights", "Model Training & SOTA", "Algorithm Lab", "Prediction History", "Report & Viva", "About"])
-st.sidebar.caption("Educational decision-support prototype")
+st.sidebar.title("🌱 CropWise")
+PAGES = ["Home", "Get a Recommendation", "Explore the Data", "Train & Compare Models", "Learn the Algorithms", "History"]
+if "page" not in st.session_state: st.session_state.page = "Home"
+page = st.sidebar.radio("Go to", PAGES, key="page")
+st.sidebar.caption("Decision-support prototype built on a public dataset. Not agronomic advice.")
+def go(p): st.session_state.page = p
 
 def get_trained():
     return st.session_state.training
+
+def explain(what, read, trust, algo=None):
+    """Same three questions under every feature: what is it, how to read it, when to trust it."""
+    with st.expander("ℹ️ What am I looking at?"):
+        st.markdown(f"**What it is.** {what}")
+        st.markdown(f"**How to read it.** {read}")
+        st.markdown(f"**When to trust it.** {trust}")
+        if algo: st.caption(f"Built with: {algo}")
 
 def dataset_uploader():
     up = st.file_uploader("Upload Crop_recommendation.csv", type=["csv"], key="crop_dataset_upload")
@@ -42,38 +53,56 @@ def dataset_uploader():
             st.session_state.source_df = pd.read_csv(local)
     return st.session_state.source_df
 
-if page == "Dashboard":
-    st.title("CropWise Ultimate")
-    st.subheader("Crop recommendation, model benchmarking and ML practicals in one app")
-    st.write("Upload a crop dataset, compare classification models, tune selected hyperparameters, test recommendations and explore core ML algorithms.")
+INFO = {"N": ("Nitrogen (N)", "Nitrogen content ratio in the soil"), "P": ("Phosphorus (P)", "Phosphorus content ratio in the soil"),
+        "K": ("Potassium (K)", "Potassium content ratio in the soil"), "temperature": ("Temperature (°C)", "Average temperature"),
+        "humidity": ("Humidity (%)", "Relative humidity"), "ph": ("Soil pH", "Soil acidity (below 7) or alkalinity (above 7)"),
+        "rainfall": ("Rainfall (mm)", "Rainfall")}
+
+if page == "Home":
+    st.title("🌱 CropWise")
+    st.subheader("Describe your soil and weather. Get a crop suggestion and see exactly why.")
     r = get_trained()
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown("### 1 · Train"); st.write("Load the crop dataset and train the models (about a minute).")
+        st.write("✅ Done" if r else "⬜ Not done yet")
+        st.button("Go to training →", on_click=go, args=("Train & Compare Models",), key="h1")
+    with c2:
+        st.markdown("### 2 · Ask"); st.write("Enter your field's conditions and get a recommendation with reasons.")
+        st.write("Ready" if r else "Needs step 1")
+        st.button("Get a recommendation →", on_click=go, args=("Get a Recommendation",), key="h2", disabled=not r)
+    with c3:
+        st.markdown("### 3 · Explore"); st.write("See what each crop needs, the decision rules and the climate zones.")
+        st.write("Ready" if r else "Needs step 1")
+        st.button("Explore the data →", on_click=go, args=("Explore the Data",), key="h3", disabled=not r)
     if r:
-        a,b,c = st.columns(3)
-        a.metric("Rows after cleaning", f'{r["cleaning"]["rows_after_cleaning"]:,}')
-        b.metric("Crop classes", r["cleaning"]["class_count"])
-        c.metric("Best model", r["best_name"])
-        st.dataframe(r["metrics"], width="stretch")
-    else:
-        st.info("Start at **Model Training & SOTA** to upload the CSV and train the benchmark.")
-    st.markdown("**Workflow:** CSV → cleaning → stratified split → model training → held-out evaluation → recommendation UI → SQLite history.")
-    st.markdown("**Practicals as features:** Find-S → crop suitability profiles · ID3 → *why this crop?* rules · KNN + GridSearchCV → top picks & similar fields · Linear Regression → estimate an unknown input · K-Means → agro-climatic zones.")
-elif page == "Recommend Crop":
-    st.title("Recommend a crop")
+        a, b, c = st.columns(3)
+        a.metric("Records used", f'{r["cleaning"]["rows_after_cleaning"]:,}'); b.metric("Crops it knows", r["cleaning"]["class_count"]); c.metric("Best model", r["best_name"])
+    with st.expander("ℹ️ How does it work?"):
+        st.markdown("The app learns from a public dataset of soil and weather readings labelled with the crop that suits them. "
+                    "Several models are trained and scored on data they have never seen; the best one makes the recommendation. "
+                    "Other methods then explain it: which conditions matter, which real records look similar, and what climate group your field belongs to.")
+        st.caption("Built with: model comparison, Find-S, ID3, KNN, Linear Regression and K-Means — each is explained where it appears.")
+    st.caption("Treat results as decision support only. Real planting decisions need local soil tests and expert advice.")
+
+elif page == "Get a Recommendation":
+    st.title("Get a crop recommendation")
     r = get_trained()
     if r is None:
-        st.warning("Train the models on the Model Training & SOTA page first.")
+        st.warning("The models need to be trained first.")
+        st.button("Train them now →", on_click=go, args=("Train & Compare Models",))
     else:
-        ins = r["insights"]
-        st.caption("Enter soil nutrient levels and weather conditions. Tick **Don't know** to have Linear Regression estimate that input from the others.")
+        ins = r["insights"]; Xtr = ins["X_train"]
+        st.write("Enter your field's conditions. If you don't have a measurement, tick **Estimate it** and the app works it out from the others.")
         defaults = {"N":90.0,"P":42.0,"K":43.0,"temperature":20.9,"humidity":82.0,"ph":6.5,"rainfall":202.9}
         with st.form("prediction_form"):
-            cols = st.columns(4)
-            vals, unknown = {}, []
+            cols = st.columns(4); vals, unknown = {}, []
             for i, f in enumerate(FEATURES):
-                with cols[i%4]:
-                    vals[f] = st.number_input(f, value=defaults[f], format="%.2f")
-                    if st.checkbox("Don't know", key=f"unk_{f}"): unknown.append(f)
-            submitted = st.form_submit_button("Predict crop", type="primary")
+                label, hint = INFO[f]
+                with cols[i % 4]:
+                    vals[f] = st.number_input(label, value=defaults[f], format="%.2f", help=f"{hint}. Range in the training data: {Xtr[f].min():.1f} to {Xtr[f].max():.1f}.")
+                    if st.checkbox("Estimate it", key=f"unk_{f}", help="Tick if you don't know this value. It will be predicted from the other inputs."): unknown.append(f)
+            submitted = st.form_submit_button("Recommend a crop", type="primary")
         if submitted:
             try:
                 notes, estimates = None, {}
@@ -86,97 +115,122 @@ elif page == "Recommend Crop":
                 database.save_prediction(vals, str(pred), r["best_name"], notes)
                 st.session_state.last_rec = {"vals": vals, "pred": str(pred), "estimates": estimates}
             except Exception as e:
-                st.session_state.last_rec = None; st.error(f"Prediction failed: {e}")
+                st.session_state.last_rec = None; st.error(f"Could not make a recommendation: {e}")
         rec = st.session_state.get("last_rec")
         if rec:
             vals, pred = rec["vals"], rec["pred"]
-            st.success(f"Predicted crop: **{pred}**  (model: {r['best_name']})")
-            st.caption("Dataset-based prediction, not a guarantee of agricultural success.")
-            t1,t2,t3,t4,t5,t6 = st.tabs(["🥇 Top picks (KNN)","🌳 Why? (ID3 rules)","🔎 Similar fields (KNN)","🗺️ Climate zone (K-Means)","✅ Suitability (Find-S)","📐 Estimated inputs (Linear Regression)"])
+            st.success(f"### Suggested crop: {pred}")
+            outside = [INFO[f][0] for f in FEATURES if f not in rec["estimates"] and not (Xtr[f].min() <= vals[f] <= Xtr[f].max())]
+            if outside: st.warning("These values are outside the range the models learned from, so treat the result with extra caution: " + ", ".join(outside) + ".")
+            votes = {f"Best model ({r['best_name']})": pred}
+            if "knn" in ins: votes["Nearest real records (KNN)"] = str(fx.knn_top_picks(ins["knn"], vals).iloc[0]["Crop"])
+            if "id3" in ins: votes["Decision rules (ID3)"] = str(ins["id3"]["tree"].explain(ins["binner5"].transform(pd.DataFrame([vals], columns=FEATURES)).iloc[0].to_dict())["prediction"])
+            agree = sum(v == pred for v in votes.values())
+            (st.info if agree == len(votes) else st.warning)(f"{agree} of {len(votes)} methods agree on **{pred}**." + ("" if agree == len(votes) else " This input sits between crops, so compare the alternatives below."))
+            with st.expander("See each method's answer"): st.table(pd.DataFrame({"Method": list(votes), "Suggests": list(votes.values())}))
+            t1,t2,t3,t4,t5,t6 = st.tabs(["Best matches","Why this crop","Similar fields","Climate zone",f"Can I grow…?","Filled-in values"])
             with t1:
+                st.caption("The three crops most common among the real records closest to your field.")
                 if "knn" in ins:
-                    k = ins["knn"]; top = fx.knn_top_picks(k, vals)
-                    st.dataframe(top.style.format({"Neighbour vote share":"{:.0%}"}), width="stretch", hide_index=True)
-                    st.caption(f"Tuned KNN (GridSearchCV, training-set CV): {k['best_params']} · held-out accuracy {k['test_accuracy']:.3f}. Vote share is the fraction of neighbours voting for a crop, not a calibrated probability.")
-                    if top.iloc[0]["Crop"] != pred: st.info("The best benchmark model and tuned KNN disagree — treat this input as borderline and check the alternatives.")
-                else: st.warning("KNN feature unavailable: " + ins["errors"].get("knn","unknown error"))
+                    k = ins["knn"]; st.dataframe(fx.knn_top_picks(k, vals).style.format({"Neighbour vote share":"{:.0%}"}), width="stretch", hide_index=True)
+                    explain("The app finds the real records most similar to your field and counts which crop they grew.", "Vote share is the fraction of those neighbours that chose each crop. A high top share means your field looks very like known fields for that crop.",
+                            "Trust it more when one crop dominates; if shares are close, your field is borderline. It is a vote count, not a calibrated probability.", f"KNN tuned with GridSearchCV ({k['best_params']}; held-out accuracy {k['test_accuracy']:.3f})")
+                else: st.warning("Unavailable: " + ins["errors"].get("knn", "unknown error"))
             with t2:
                 if "id3" in ins:
-                    d = ins["id3"]; row = ins["binner5"].transform(pd.DataFrame([vals], columns=FEATURES)).iloc[0].to_dict()
-                    ex = d["tree"].explain(row)
-                    st.markdown(f"**ID3 says: {ex['prediction']}** · leaf support {ex['support']} samples · leaf purity {ex['purity']:.0%}")
-                    for f, v, g in ex["path"]: st.write(f"• **{f}** is **{ins['binner5'].describe(f, v)}**  _(information gain {g:.3f} at this split)_")
-                    st.caption(f"Hand-coded ID3 on 5-level binned inputs · held-out accuracy {d['test_accuracy']:.3f}. It may differ from the benchmark model; use it as an explanation, not a second opinion.")
-                else: st.warning("ID3 feature unavailable: " + ins["errors"].get("id3","unknown error"))
+                    d = ins["id3"]; ex = d["tree"].explain(ins["binner5"].transform(pd.DataFrame([vals], columns=FEATURES)).iloc[0].to_dict())
+                    st.caption("The chain of questions about your field that leads to the answer, most informative first.")
+                    for f, v, g in ex["path"]: st.write(f"• **{INFO[f][0]}** is **{ins['binner5'].describe(f, v)}**")
+                    st.markdown(f"➜ **{ex['prediction']}**  ·  based on {ex['support']} similar records, {ex['purity']:.0%} of which agree")
+                    explain("A set of if-then rules learned from the data. Each step asks about the input that best separates the crops.", "Read the bullets top to bottom. The last line shows how many training records reached that answer and how many agreed.",
+                            "Use it to understand the reasoning. It can differ from the main model, and a small support count means a shaky rule.", f"ID3 decision tree, hand-coded (held-out accuracy {d['test_accuracy']:.3f})")
+                else: st.warning("Unavailable: " + ins["errors"].get("id3", "unknown error"))
             with t3:
+                st.caption("The real records in the dataset that look most like your field.")
                 if "knn" in ins:
                     st.dataframe(fx.similar_fields(ins["knn"], vals, 5), width="stretch", hide_index=True)
-                    st.caption("The closest records in the training data (standardised distance). Large distances mean your field is unlike anything in the dataset.")
+                    explain("The five closest records in the training data, measured after putting all inputs on the same scale.", "Check the Crop column for agreement. A small distance means a close match.",
+                            "If every distance is large, your field is unlike anything in the dataset, so the recommendation is a guess.", "KNN nearest-neighbour search")
             with t4:
                 if "zones" in ins:
-                    z = fx.assign_zone(ins["zones"], vals); st.markdown(f"**Your field falls in {z['name']}** (of {ins['zones']['k']} zones)")
-                    st.dataframe(z["profile"].map(lambda v: f"{v:.1f}" if isinstance(v,(float,np.floating)) else str(v)).to_frame("Zone profile (training mean)"), width="stretch")
+                    z = fx.assign_zone(ins["zones"], vals); st.caption(f"Your field belongs to **{z['name']}** out of {ins['zones']['k']} climate and soil groups.")
+                    st.dataframe(z["profile"].map(lambda v: f"{v:.1f}" if isinstance(v, (float, np.floating)) else str(v)).to_frame("Typical values in this zone"), width="stretch")
                     fig, ax = plt.subplots(figsize=(6,4)); P = ins["zones"]["points"]
                     ax.scatter(P[:,0], P[:,1], c=ins["zones"]["labels"], cmap="tab10", alpha=.35, s=12)
-                    ax.scatter(*z["point"], marker="*", s=300, c="red", edgecolors="black", label="Your field"); ax.legend()
-                    ax.set_xlabel("PC1"); ax.set_ylabel("PC2"); fig.tight_layout(); st.pyplot(fig); plt.close(fig)
-                    st.caption("Zones come from unsupervised K-Means on standardised inputs; they describe similar growing conditions and are not crop labels.")
-                else: st.warning("Zone feature unavailable: " + ins["errors"].get("zones","unknown error"))
+                    ax.scatter(*z["point"], marker="*", s=300, c="red", edgecolors="black", label="Your field"); ax.legend(); ax.set_xlabel("Combined axis 1"); ax.set_ylabel("Combined axis 2"); fig.tight_layout(); st.pyplot(fig); plt.close(fig)
+                    explain("Fields were grouped automatically by how similar their soil and weather are, without looking at crop names.", "The table shows the average conditions of your zone and which crops are common there. The red star is your field among all others.",
+                            "Zones describe similar growing conditions. They are not recommendations by themselves.", "K-Means clustering")
+                else: st.warning("Unavailable: " + ins["errors"].get("zones", "unknown error"))
             with t5:
                 if "profiles" in ins:
-                    crops = sorted(ins["profiles"]); choice = st.selectbox("Check suitability for crop", crops, index=crops.index(pred) if pred in crops else 0)
-                    variant = st.radio("Find-S variant", ["tolerant","strict"], horizontal=True, help="Strict is textbook Find-S; tolerant keeps a value if ≥90% of positive examples share it (extension for noisy data).")
-                    res = fx.suitability(ins["binner3"], ins["profiles"], choice, vals, variant)
-                    if res["score"] is None: st.info("This crop's hypothesis has no constraints (all '?') so every field matches. Try the tolerant variant.")
-                    else:
-                        st.metric("Matching conditions", f"{res['matched']}/{res['constrained']}")
+                    crops = sorted(ins["profiles"]); c_ = st.selectbox("Pick a crop to check", crops, index=crops.index(pred) if pred in crops else 0)
+                    var = st.radio("Strictness", ["tolerant", "strict"], horizontal=True, format_func=lambda x: "Relaxed (recommended)" if x == "tolerant" else "Strict (textbook Find-S)")
+                    hyp = ins["profiles"][c_][var]; need = [f"{INFO[f][0]}: **{ins['binner3'].describe(f, v)}**" for f, v in hyp.items() if v != "?"]
+                    st.markdown(f"**What {c_} usually needs:** " + ("; ".join(need) if need else "no consistent requirement found in this mode."))
+                    res = fx.suitability(ins["binner3"], ins["profiles"], c_, vals, var)
+                    if res["score"] is not None:
+                        st.metric("Conditions your field meets", f"{res['matched']} of {res['constrained']}")
                         st.dataframe(pd.DataFrame(res["checks"]).replace({True:"✅",False:"❌"}), width="stretch", hide_index=True)
-                    st.caption("Find-S learns the most specific profile covering all (or ≥90%) of a crop's examples. A mismatch flags a condition worth adjusting; a match is not proof of success.")
-                else: st.warning("Find-S feature unavailable: " + ins["errors"].get("profiles","unknown error"))
+                    explain("A profile of the conditions shared by the crop's records, compared against your field.", "✅ means your field falls in the range the crop usually needs; ❌ shows what to adjust or reconsider.",
+                            "Good as a checklist. Strict mode often finds almost no requirements because real data is noisy, so relaxed mode keeps a condition if at least 90% of records share it (an extension of Find-S).", "Find-S concept learning")
+                else: st.warning("Unavailable: " + ins["errors"].get("profiles", "unknown error"))
             with t6:
                 if rec["estimates"]:
-                    st.dataframe(pd.DataFrame([{"Input": f, "Estimated value": e["value"], "Held-out R²": e["R2"], "Held-out MAE": e["MAE"], "Predictors": ", ".join(e["predictors"])} for f, e in rec["estimates"].items()]), width="stretch", hide_index=True)
-                    if any(e["R2"] < 0.5 for e in rec["estimates"].values()): st.warning("Some estimates have R² < 0.5 — they are weak guesses. Prefer measuring those inputs.")
-                else: st.info("You supplied every input. Tick **Don't know** under an input to have it estimated.")
-elif page == "Field Insights":
-    st.title("Field Insights — dataset-wide views")
+                    st.dataframe(pd.DataFrame([{"Input": INFO[f][0], "Estimated value": e["value"], "Accuracy (R²)": e["R2"], "Typical error": e["MAE"], "Based on": ", ".join(INFO[p][0] for p in e["predictors"])} for f, e in rec["estimates"].items()]), width="stretch", hide_index=True)
+                    if any(e["R2"] < 0.5 for e in rec["estimates"].values()): st.warning("Some estimates are weak guesses (accuracy below 0.5). Measure those inputs if you can.")
+                else: st.info("You entered every value, so nothing was estimated. Tick **Estimate it** under an input to try this.")
+                explain("Missing inputs are predicted from the ones you did know, using patterns in the data.", "Accuracy (R²) runs from 0 (no better than guessing the average) to 1 (perfect). Typical error is in the input's own units.",
+                        "Rely on estimates only when accuracy is high. They are also saved with the prediction in History.", "Linear Regression")
+
+elif page == "Explore the Data":
+    st.title("Explore what the models learned")
     r = get_trained()
-    if r is None: st.warning("Train the models on the Model Training & SOTA page first.")
+    if r is None:
+        st.warning("The models need to be trained first."); st.button("Train them now →", on_click=go, args=("Train & Compare Models",), key="e0")
     else:
         ins = r["insights"]
-        for k_, msg in ins["errors"].items(): st.warning(f"{k_} unavailable: {msg}")
-        a,b,c,d,e = st.tabs(["Crop profiles (Find-S)","Decision rules (ID3)","KNN tuning","Input estimation (Linear Regression)","Zones (K-Means)"])
+        for k_, msg in ins["errors"].items(): st.warning(f"{k_} is unavailable: {msg}")
+        a,b,c,d,e = st.tabs(["What each crop needs","Decision rules","Neighbour search","Missing-value accuracy","Climate zones"])
         with a:
             if "profiles" in ins:
-                var = st.radio("Variant", ["tolerant","strict"], horizontal=True, key="prof_var")
+                var = st.radio("Strictness", ["tolerant","strict"], horizontal=True, key="prof_var", format_func=lambda x: "Relaxed (recommended)" if x == "tolerant" else "Strict (textbook Find-S)")
                 st.dataframe(pd.DataFrame({c_: v[var] for c_, v in ins["profiles"].items()}).T, width="stretch")
-                st.caption("Rows are crops; columns are Low/Medium/High bins of each input (quantiles of the training data). '?' = no consistent requirement.")
+                explain("For every crop, the Low/Medium/High level of each input that its records have in common.", "Rows are crops. '?' means the crop grows across different levels of that input.",
+                        "Levels are relative to this dataset (split into thirds), not agronomic standards.", "Find-S concept learning")
         with b:
             if "id3" in ins:
-                m1,m2 = st.columns(2); m1.metric("Held-out accuracy", f"{ins['id3']['test_accuracy']:.3f}"); m2.metric("Held-out macro F1", f"{ins['id3']['test_f1_macro']:.3f}")
-                st.code(ins["id3"]["tree"].to_text(ins["binner5"]), language="text")
-                st.download_button("Download rules (txt)", ins["id3"]["tree"].to_text(ins["binner5"]), "id3_rules.txt")
+                m1,m2 = st.columns(2); m1.metric("Accuracy on unseen data", f"{ins['id3']['test_accuracy']:.3f}"); m2.metric("Macro F1", f"{ins['id3']['test_f1_macro']:.3f}")
+                txt = ins["id3"]["tree"].to_text(ins["binner5"]); st.code(txt, language="text"); st.download_button("Download rules (txt)", txt, "id3_rules.txt")
+                explain("The full set of questions the rule-based model asks, from the most informative input down to a crop.", "Follow a branch from the top; each line adds a condition. '➜' marks the crop and (n) the records behind it.",
+                        "Long branches with small n are weak. Use the rules to understand patterns, not as the final answer.", "ID3, hand-coded with entropy and information gain")
         with c:
             if "knn" in ins:
                 k = ins["knn"]; m1,m2,m3 = st.columns(3)
-                m1.metric("CV macro F1 (train)", "n/a" if k["cv_f1_macro"] is None else f"{k['cv_f1_macro']:.3f}"); m2.metric("Test accuracy", f"{k['test_accuracy']:.3f}"); m3.metric("Test macro F1", f"{k['test_f1_macro']:.3f}")
+                m1.metric("Cross-validation score", "n/a" if k["cv_f1_macro"] is None else f"{k['cv_f1_macro']:.3f}"); m2.metric("Accuracy on unseen data", f"{k['test_accuracy']:.3f}"); m3.metric("Macro F1", f"{k['test_f1_macro']:.3f}")
                 st.json(k["best_params"])
+                explain("The settings chosen for the neighbour search (how many neighbours, and whether closer ones count more).", "Higher scores mean the search recommends the right crop more often on data it has not seen.",
+                        "Settings were chosen using training data only, so the held-out score is an honest estimate.", "KNN with GridSearchCV")
         with d:
             if "regression" in ins:
                 st.dataframe(ins["regression"].style.format({"R²":"{:.3f}","MAE":"{:.2f}","RMSE":"{:.2f}"}), width="stretch", hide_index=True)
-                st.caption("How well each input can be estimated from the other six on held-out data. Low R² means that input should be measured, not guessed.")
+                explain("How well each input can be predicted from the other six.", "R² near 1 means it can be estimated reliably; near 0 means the estimate is little better than the average. MAE and RMSE are typical errors in the input's own units.",
+                        "If R² is low for an input, measure it instead of using 'Estimate it'.", "Linear Regression")
         with e:
             if "zones" in ins:
-                kk = st.slider("Number of zones (default = best silhouette)", 2, 8, ins["zones"]["k"])
+                kk = st.slider("Number of zones (default is the best-separated grouping)", 2, 8, ins["zones"]["k"])
                 z = ins["zones"] if kk == ins["zones"]["k"] else fx.build_zones(ins["X_train"], ins["y_train"], k=kk)
-                st.metric("Silhouette", f"{z['silhouette']:.3f}")
+                st.metric("Separation score (silhouette)", f"{z['silhouette']:.3f}")
                 st.dataframe(z["profiles"].style.format({f_:"{:.1f}" for f_ in FEATURES}), width="stretch", hide_index=True)
                 fig, axs = plt.subplots(1,2,figsize=(11,4))
-                axs[0].scatter(z["points"][:,0], z["points"][:,1], c=z["labels"], cmap="tab10", s=12, alpha=.6); axs[0].set_title("Zones (PCA view)")
-                axs[1].plot(z["sweep"]["k"], z["sweep"]["inertia"], marker="o"); axs[1].set_title("Elbow (inertia)"); axs[1].set_xlabel("k")
+                axs[0].scatter(z["points"][:,0], z["points"][:,1], c=z["labels"], cmap="tab10", s=12, alpha=.6); axs[0].set_title("Zones (2-D view)")
+                axs[1].plot(z["sweep"]["k"], z["sweep"]["inertia"], marker="o"); axs[1].set_title("Elbow: tightness vs number of zones"); axs[1].set_xlabel("Number of zones")
                 fig.tight_layout(); st.pyplot(fig); plt.close(fig)
-elif page == "Model Training & SOTA":
-    st.title("Data cleaning, splitting and SOTA model comparison")
+                explain("Groups of fields with similar soil and weather, found without using crop names.", "Each table row is a zone with its average conditions and most common crops. Separation score runs from -1 to 1; higher means cleaner groups. On the elbow chart, look for where the curve bends.",
+                        "Different numbers of zones give different groupings, so treat them as a way to explore, not as fixed categories.", "K-Means clustering")
+
+elif page == "Train & Compare Models":
+    st.title("Train and compare models")
+    st.markdown("**1.** Load the dataset  **2.** The app cleans it and splits it 80/20 (the 20% is kept hidden)  **3.** Six models learn from the 80%  **4.** They are scored on the hidden 20%, and the best one is used for recommendations.")
     df = dataset_uploader()
     if df is not None:
         st.subheader("Dataset preview")
@@ -198,10 +252,16 @@ elif page == "Model Training & SOTA":
         st.markdown("Expected columns: `N`, `P`, `K`, `temperature`, `humidity`, `ph`, `rainfall`, `label`.")
     r = get_trained()
     if r:
+        m0 = r["metrics"].iloc[0]
+        st.success(f"Best model on unseen data: **{r['best_name']}** (accuracy {m0['Accuracy']:.3f}, macro F1 {m0['F1 (macro)']:.3f}).")
+        st.button("Next: get a recommendation →", on_click=go, args=("Get a Recommendation",), key="t_next")
         st.subheader("Cleaning report")
+        st.caption("What was checked and removed before training (missing, invalid and duplicate rows).")
         st.json(r["cleaning"])
         st.subheader("Held-out test-set comparison")
         st.dataframe(r["metrics"].style.format({c:"{:.4f}" for c in r["metrics"].select_dtypes(include="number").columns}), width="stretch")
+        with st.expander("ℹ️ What do these columns mean?"):
+            st.markdown("**Accuracy**: share of test fields where the crop was right.  \n**Precision**: when a model names a crop, how often it is right.  \n**Recall**: how many of a crop's real fields the model finds.  \n**F1 (macro)**: balances precision and recall, averaged equally over all crops. The best model is ranked by this.  \n**Train / Predict time**: seconds to learn and to answer.")
         st.download_button("Download model comparison CSV", r["metrics"].to_csv(index=False).encode(), "model_comparison.csv", "text/csv")
         fig, ax = plt.subplots(figsize=(9,4))
         sns.barplot(data=r["metrics"], x="F1 (macro)", y="Model", ax=ax)
@@ -216,9 +276,9 @@ elif page == "Model Training & SOTA":
             sns.heatmap(cm, cmap="Blues", ax=ax, xticklabels=labels, yticklabels=labels)
             ax.set_xlabel("Predicted"); ax.set_ylabel("Actual"); ax.set_title("Best model confusion matrix")
             plt.xticks(rotation=90); plt.yticks(rotation=0); fig.tight_layout(); st.pyplot(fig); plt.close(fig)
-elif page == "Algorithm Lab":
-    st.title("Core ML practicals lab")
-    st.info("Each practical below is also wired into the main app as a feature — see **Recommend Crop** and **Field Insights**. This lab keeps the standalone teaching versions.")
+elif page == "Learn the Algorithms":
+    st.title("Learn the algorithms")
+    st.info("Each practical below is also wired into the main app as a feature — see **Get a Recommendation** and **Explore the Data**. This lab keeps the standalone teaching versions.")
     st.warning("Find-S requires a concept-learning dataset with a clearly defined positive target. Regression and K-Means examples use numeric data or a clearly labeled synthetic demo when the crop CSV is unsuitable.")
     tab1,tab2,tab3,tab4,tab5 = st.tabs(["Find-S","Linear Regression","Hyperparameter Tuning + KNN","Decision Tree / ID3","K-Means"])
     with tab1:
@@ -287,8 +347,9 @@ elif page == "Algorithm Lab":
             ax.set_title("K-Means clusters (first two scaled features)"); ax.legend(); fig.tight_layout()
             st.pyplot(fig); plt.close(fig)
             st.caption("Clusters are groups, not verified crop recommendations. Interpret them cautiously.")
-elif page == "Prediction History":
-    st.title("Prediction history")
+elif page == "History":
+    st.title("History")
+    st.caption("Every recommendation made in this app, with any values that were estimated, and past training runs.")
     rows = database.get_predictions()
     if rows:
         st.dataframe(pd.DataFrame([dict(r) for r in rows]), width="stretch")
@@ -297,24 +358,3 @@ elif page == "Prediction History":
     st.subheader("Training runs")
     if runs: st.dataframe(pd.DataFrame([dict(r) for r in runs]), width="stretch")
     else: st.info("No training runs saved yet.")
-elif page == "Report & Viva":
-    st.title("10-page report guide and viva notes")
-    st.info("A report template is included in `reports/REPORT_TEMPLATE.md`. Replace all placeholders with your measured results and verified papers.")
-    st.markdown("### Suggested 10-page allocation")
-    st.table(pd.DataFrame([
-        ["1","Introduction and problem statement"],["2–3","Literature review: at least 5 recent papers, compared critically"],
-        ["4","Methodology and system architecture"],["5","Data cleaning, preprocessing and split"],
-        ["6–7","SOTA model comparison, metrics, figures, confusion matrix"],["8","UI development and database"],
-        ["9","Deployment, limitations, reproducibility"],["10","Conclusion and references"]
-    ],columns=["Pages","Content"]))
-    st.markdown("### Viva essentials")
-    with st.expander("Why use a held-out test set?"): st.write("It estimates performance on unseen examples. The test set must not be used to tune model choices repeatedly.")
-    with st.expander("Why macro F1?"): st.write("It calculates F1 per class and averages classes equally, making each crop class count equally even if class sizes differ.")
-    with st.expander("What is hyperparameter tuning?"): st.write("It searches candidate settings using cross-validation on training data. Final performance is reported once on the held-out test set.")
-    with st.expander("Why does K-Means not predict labels?"): st.write("K-Means is unsupervised and groups numeric observations by distance; clusters need interpretation and are not ground-truth crop labels.")
-    with st.expander("Is this ID3?"): st.write("The implementation uses entropy criterion in scikit-learn and is described as ID3-style. It is not claimed to be a complete hand-coded original ID3 implementation.")
-elif page == "About":
-    st.title("About CropWise Ultimate")
-    st.write("Educational prototype combining supervised crop classification, algorithm demonstrations, SQLite logging and model evaluation.")
-    st.warning("Do not use the prediction as the sole basis for farming decisions. Real recommendations need region-specific agronomy, validated soil tests and expert review.")
-    st.markdown("Source code is organized into `app.py`, `database.py`, `services/`, `reports/`, and `tests/`.")

@@ -14,14 +14,14 @@ An educational B.Tech mini-project for crop classification, model benchmarking, 
 
 | Practical | Feature in the app | Where |
 |---|---|---|
-| Find-S | Crop suitability profiles: "does my field match what crop X needs?" (strict Find-S + a labelled noise-tolerant extension) | Recommend Crop → Suitability; Field Insights |
-| ID3 (hand-coded, entropy / information gain) | "Why this crop?" decision path and downloadable rule tree | Recommend Crop → Why?; Field Insights |
-| KNN + GridSearchCV | Top-3 picks (neighbour vote share) and "similar fields" lookup | Recommend Crop → Top picks / Similar fields; Field Insights |
-| Linear Regression | Tick "Don't know" on any input and it is estimated from the others, with held-out R²/MAE shown; flagged in history | Recommend Crop → Estimated inputs |
-| K-Means | Agro-climatic zones: your field is assigned a zone with its profile and dominant crops; k chosen by silhouette, elbow plot | Recommend Crop → Climate zone; Field Insights |
+| Find-S | Crop suitability profiles: "does my field match what crop X needs?" (strict Find-S + a labelled noise-tolerant extension) | Get a Recommendation → Suitability; Explore the Data |
+| ID3 (hand-coded, entropy / information gain) | "Why this crop?" decision path and downloadable rule tree | Get a Recommendation → Why?; Explore the Data |
+| KNN + GridSearchCV | Top-3 picks (neighbour vote share) and "similar fields" lookup | Get a Recommendation → Top picks / Similar fields; Explore the Data |
+| Linear Regression | Tick "Don't know" on any input and it is estimated from the others, with held-out R²/MAE shown; flagged in history | Get a Recommendation → Estimated inputs |
+| K-Means | Agro-climatic zones: your field is assigned a zone with its profile and dominant crops; k chosen by silhouette, elbow plot | Get a Recommendation → Climate zone; Explore the Data |
 
 - Algorithm Lab: standalone teaching versions of the same practicals (Iris KNN demo, synthetic fallbacks, etc.).
-- Report template and viva notes.
+- Report template.
 
 ## Requirements
 Python 3.10+ (3.11 recommended). Windows/macOS/Linux.
@@ -41,7 +41,7 @@ If `python` is unavailable, install from https://www.python.org/downloads/ and t
 ## Dataset
 The project intentionally does not redistribute the CSV. Obtain `Crop_recommendation.csv` from:
 https://www.kaggle.com/datasets/atharvaingle/crop-recommendation-dataset
-Check dataset license/attribution and upload it in **Model Training & SOTA**, or place it at `data/Crop_recommendation.csv`. Expected columns: `N`, `P`, `K`, `temperature`, `humidity`, `ph`, `rainfall`, `label`.
+Check dataset license/attribution and upload it in **Train & Compare Models**, or place it at `data/Crop_recommendation.csv`. Expected columns: `N`, `P`, `K`, `temperature`, `humidity`, `ph`, `rainfall`, `label`.
 
 ## Algorithm Lab notes
 - **Find-S:** upload a concept-learning CSV with features plus a final target column whose positive examples are named Yes/Positive/1/True. This algorithm is not trained on the crop labels because those are multiclass classes, not positive/negative concept labels.

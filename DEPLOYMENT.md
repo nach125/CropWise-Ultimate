@@ -22,6 +22,6 @@ Use `run_windows.bat` on Windows, or follow README.md.
 2. Sign in to Streamlit Community Cloud and deploy the repository.
 3. Set the main file path to `app.py` (repository root is this folder).
 4. Install dependencies from `requirements.txt`.
-5. Upload the dataset in the app's Model Training & SOTA page.
+5. Upload the dataset in the app's Train & Compare Models page.
 
 Note: Community Cloud's local filesystem may be ephemeral; SQLite history and trained artifacts may not persist reliably across restarts. For persistent production deployment, use a managed database/object store. This project is a demo, not a production agricultural advisory service.

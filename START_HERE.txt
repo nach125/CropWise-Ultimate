@@ -5,5 +5,5 @@ CROPWISE ULTIMATE — START HERE (Windows)
    python -m pip install -r requirements.txt
    python -m streamlit run app.py
 4. Open http://localhost:8501 if the browser does not open.
-5. On Model Training & SOTA, upload Crop_recommendation.csv and train.
+5. On Train & Compare Models, upload Crop_recommendation.csv and train.
 Dataset is not included in ZIP. Source link is in README.md.

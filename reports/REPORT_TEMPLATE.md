@@ -29,7 +29,7 @@ Report actual metrics from `model_comparison.csv`. Discuss trade-offs, not just 
 Compare at least four models on the same split. Suggested candidates: Decision Tree, Random Forest, SVM, Gradient Boosting, KNN, Extra Trees. Include Accuracy, Macro Precision, Macro Recall, Macro F1, Weighted F1, training time, prediction time. Explain that a high score on one dataset is not proof of real-world generalization.
 
 ## 7. User Interface Development and Deployment
-Explain Streamlit pages (Dashboard, Recommend Crop, Model Training & SOTA, Algorithm Lab, Prediction History, Report & Viva), input validation, model training flow, and SQLite persistence. Include screenshots. Explain local run and chosen public deployment platform if deployed; do not say deployed unless it is live.
+Explain Streamlit pages (Home, Get a Recommendation, Explore the Data, Train & Compare Models, Learn the Algorithms, History), input validation, model training flow, and SQLite persistence. Include screenshots. Explain local run and chosen public deployment platform if deployed; do not say deployed unless it is live.
 
 ## 8. Practicals as Features and Algorithm Lab (briefly fit within page limit)
 Describe how each practical became a feature (see README table): Find-S suitability, ID3 explanations, KNN top picks/similar fields, Linear Regression input estimation, K-Means zones. Report the held-out numbers shown on the Field Insights page from your own run.
